@@ -1,0 +1,65 @@
+const TRUSTED_CHILD_ORIGIN = "http://localhost:5173";
+
+function showErrorToast(message) {
+    Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: message,
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true
+    });
+}
+
+window.addEventListener('message', function(event) {
+    if (event.data?.type === 'OPEN_RZP') {
+        console.log('✅ OPEN_RZP message received, calling handleRazorpayPayment');
+        handleRazorpayPayment(event);
+    } else {
+        console.log('Unknown message type received:', event.data?.type);
+    }
+});
+
+function handleRazorpayPayment(event) {
+    if (!window.Razorpay) {
+        showErrorToast('Payment system not available. Please refresh the page and try again.');
+        return;
+    }
+    const razorpayData = event.data.payload;
+    const cleanRazorpayData = JSON.parse(JSON.stringify(razorpayData));
+
+    const options = {
+        key: cleanRazorpayData.key,
+        amount: cleanRazorpayData.amount,
+        currency: cleanRazorpayData.currency,
+        name: cleanRazorpayData.name,
+        description: cleanRazorpayData.description,
+        subscription_id: cleanRazorpayData.subscription_id,
+        order_id: cleanRazorpayData.order_id,
+        notes: cleanRazorpayData.notes,
+        handler: function(response) {
+            console.log('✅ Payment successful:', response);
+            // Send success response back to iframe
+            event.source.postMessage({
+                type: 'RZP_SUCCESS',
+                payload: response
+            }, event.origin);
+        },
+        modal: {
+            escape: cleanRazorpayData.modal?.escape || false,
+            ondismiss: function() {
+                console.log('❌ Payment modal dismissed');
+                showErrorToast('Payment cancelled by user');
+            }
+        }
+    };
+
+    try {
+        const rzp = new window.Razorpay(options);
+        rzp.open();
+    } catch (error) {
+        showErrorToast('Failed to open payment gateway. Please try again.');
+    }
+}
